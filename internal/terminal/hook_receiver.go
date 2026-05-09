@@ -10,11 +10,12 @@ import (
 func StartReceiver(stateManager *state.Manager) {
 	http.HandleFunc("/terminal-event", func(w http.ResponseWriter, r *http.Request) {
 		exitCode := r.FormValue("exit_code")
+		command := r.FormValue("command")
 		if exitCode != "0" && exitCode != "" {
-			log.Printf("[Terminal Sensor] Ошибка выполнения команды (code: %s)", exitCode)
-			stateManager.RecordError()
+			log.Printf("[Terminal Sensor] Command execution error (code: %s, cmd: %s)", exitCode, command)
+			stateManager.RecordError(command)
 		} else {
-			log.Printf("[Terminal Sensor] Успешная команда")
+			log.Printf("[Terminal Sensor] Successful command")
 			stateManager.RecordActivity("")
 		}
 		w.WriteHeader(http.StatusOK)

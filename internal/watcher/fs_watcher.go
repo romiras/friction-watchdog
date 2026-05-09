@@ -53,7 +53,7 @@ func StartFSWatcher(ctx context.Context, dir string, stateManager *state.Manager
 					if shouldDebounce(event.Name) {
 						continue
 					}
-					log.Printf("[FS Sensor] Активность: %s", filepath.Base(event.Name))
+					log.Printf("[FS Sensor] Activity: %s", filepath.Base(event.Name))
 					stateManager.RecordActivity(event.Name)
 				}
 			case err, ok := <-watcher.Errors:

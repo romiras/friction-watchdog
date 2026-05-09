@@ -18,7 +18,7 @@ func SendUpdateNotification() {
 
 	encoder := json.NewEncoder(os.Stdout)
 	if err := encoder.Encode(msg); err != nil {
-		log.Printf("Ошибка отправки уведомления: %v", err)
+		log.Printf("Error sending notification: %v", err)
 	}
 }
 
@@ -29,13 +29,21 @@ func StartIdleChecker(stateManager *state.Manager) {
 		for range ticker.C {
 			timeSinceLast, errors, threshold := stateManager.GetStatus()
 
-			// Триггер 1: Простой. Триггер 2: Цикл ошибок (>= 3)
+			// Trigger 1: Idle. Trigger 2: Error loop (>= 3)
 			if timeSinceLast >= threshold || errors >= 3 {
-				log.Println("[Watchdog] Обнаружено ТРЕНИЕ. Отправка MCP-уведомления агенту...")
+				log.Println("[Watchdog] FRICTION detected. Sending MCP notification to agent...")
+
+				var reason string
+				if errors >= 3 {
+					reason = "error_loop"
+				} else {
+					reason = "idle_timeout"
+				}
+				stateManager.SetTriggerReason(reason)
 
 				SendUpdateNotification()
 
-				// Сбрасываем счетчики, чтобы не спамить агента каждую секунду
+				// Reset counters to avoid spamming the agent every second
 				stateManager.RecordActivity("")
 			}
 		}

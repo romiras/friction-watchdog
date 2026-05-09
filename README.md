@@ -8,10 +8,10 @@ The system operates as an **Active State Observer** with three main layers:
 
 1.  **Sensors (The Eyes):**
     *   **FS Monitor:** Watches your project directory for file writes (using `fsnotify`). It intelligently ignores noise via `.gitignore` parsing and debounces rapid events.
-    *   **Terminal Hook:** A lightweight shell integration that reports the exit codes of your commands to the watchdog.
+    *   **Terminal Hook:** A lightweight shell integration that reports both the **exit codes** and the **command text** of your terminal activity to the watchdog.
 2.  **Logic (The Brain):**
-    *   The watchdog maintains a state machine. It tracks the time since your last successful action and the count of consecutive terminal errors.
-    *   If it detects "friction" (e.g., 15 minutes of silence or 3+ failed test runs), it sends a notification to your AI agent.
+    *   The watchdog maintains a state machine. It tracks the time since your last successful action, the count of consecutive terminal errors, and the last failed command.
+    *   If it detects "friction" (e.g., 15 minutes of silence or 3+ failed test runs), it determines the **trigger reason** (`idle_timeout` or `error_loop`) and sends a notification to your AI agent.
 3.  **Intervention (The Coaching):**
     *   Your AI agent (Gemini CLI, Claude Code, etc.) receives a `notifications/resources/updated` signal.
     *   The agent then reads the friction report and switches from "Coder" mode to "Coaching" mode, asking you diagnostic questions to help you decompress, delegate, or pivot.
@@ -19,11 +19,11 @@ The system operates as an **Active State Observer** with three main layers:
 ## 🧰 MCP Capabilities
 
 *   **Resources:**
-    *   `productivity://friction-report`: A JSON report containing idle time, recent files, and error count. (Push notifications via `notifications/resources/updated`).
+    *   `productivity://friction-report`: A JSON report containing idle time, recent files, error count, last failed command, and trigger reason. (Push notifications via `notifications/resources/updated`).
 *   **Tools:**
     *   `reset_timer`: Manually resets the inactivity timer and error count.
 *   **Prompts:**
-    *   `coaching_mode`: Returns instructions for the AI to act as a productivity coach based on the current friction report.
+    *   `coaching_mode`: A **data-aware prompt** that returns specific coaching instructions tailored to the current friction state (includes the live report and trigger-specific questions).
 
 ## 🛠 Installation
 
@@ -85,9 +85,9 @@ Add the Friction Watchdog to your MCP client configuration (e.g., `mcp_config.js
 To make the "coaching" effective, add these instructions to your agent's System Prompt:
 
 > You are connected to the `friction-watchdog` MCP server.
-> 1. If you receive a `notifications/resources/updated` for `productivity://friction-report`, immediately call `resources/read`.
-> 2. If the report indicates a high `idle_time_min` or `error_count`, stop your current task.
-> 3. Switch to "Coaching Mode": Ask the user if they are stuck, suggest decomposing the task, or offer to perform a deep research task to unblock them.
+> 1. If you receive a `notifications/resources/updated` for `productivity://friction-report`, call `prompts/get` with `name: "coaching_mode"`.
+> 2. The prompt will include the live diagnostic data (idle time, failed commands, trigger reason).
+> 3. Follow the instructions in that prompt to act as a productivity coach: ask the user if they are stuck, suggest decomposing the task, or offer help based on the failing command.
 
 ## ⚙️ Configuration
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 
@@ -42,9 +43,9 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 			continue
 		}
 
-		// 1. Обработка Handshake (Обязательно для MCP)
+		// 1. Handshake handling (Required for MCP)
 		if req.Method == "initialize" {
-			log.Println("[MCP] Получен запрос initialize. Отправляем capabilities...")
+			log.Println("[MCP] Received initialize request. Sending capabilities...")
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
@@ -65,13 +66,13 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 			}
 			encoder.Encode(resp)
 
-			// Отвечаем на обязательный пинг initialized (подтверждение от клиента)
+			// Respond to mandatory initialized notification (client confirmation)
 		} else if req.Method == "notifications/initialized" {
-			log.Println("[MCP] Сессия установлена.")
+			log.Println("[MCP] Session established.")
 
-			// 2. Листинг ресурсов
+			// 2. Resource listing
 		} else if req.Method == "resources/list" {
-			log.Println("[MCP] Агент запрашивает список ресурсов...")
+			log.Println("[MCP] Agent requests resource list...")
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
@@ -81,16 +82,16 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 							"uri":         "productivity://friction-report",
 							"name":        "Friction Report",
 							"mimeType":    "application/json",
-							"description": "Отчет о трении в процессе разработки (простой, ошибки)",
+							"description": "Productivity friction report (idle, errors)",
 						},
 					},
 				},
 			}
 			encoder.Encode(resp)
 
-			// 3. Обработка чтения ресурса
+			// 3. Resource reading
 		} else if req.Method == "resources/read" && req.Params.URI == "productivity://friction-report" {
-			log.Println("[MCP] Агент запрашивает статус. Отдаем Friction Report...")
+			log.Println("[MCP] Agent requests status. Sending Friction Report...")
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
@@ -106,19 +107,19 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 			}
 			encoder.Encode(resp)
 
-			// 4. Подписки на ресурсы (фиктивная обработка для совместимости)
+			// 4. Resource subscriptions (mock handling for compatibility)
 		} else if req.Method == "resources/subscribe" || req.Method == "resources/unsubscribe" {
-			log.Printf("[MCP] Получен запрос %s для %s", req.Method, req.Params.URI)
+			log.Printf("[MCP] Received request %s for %s", req.Method, req.Params.URI)
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
-				Result:  map[string]interface{}{}, // Успешный ответ
+				Result:  map[string]interface{}{}, // Successful response
 			}
 			encoder.Encode(resp)
 
 			// 5. Tools & Prompts
 		} else if req.Method == "tools/list" {
-			log.Println("[MCP] Агент запрашивает список инструментов...")
+			log.Println("[MCP] Agent requests tool list...")
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
@@ -126,7 +127,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 					"tools": []map[string]interface{}{
 						{
 							"name":        "reset_timer",
-							"description": "Сбрасывает таймер неактивности и счетчик ошибок.",
+							"description": "Resets the inactivity timer and error count.",
 							"inputSchema": map[string]interface{}{
 								"type":       "object",
 								"properties": map[string]interface{}{},
@@ -139,7 +140,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 
 		} else if req.Method == "tools/call" {
 			if req.Params.Name == "reset_timer" {
-				log.Println("[MCP] Выполняется инструмент reset_timer...")
+				log.Println("[MCP] Executing reset_timer tool...")
 				stateManager.Reset()
 				resp := ResponseRPC{
 					JSONRPC: "2.0",
@@ -148,7 +149,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 						"content": []map[string]interface{}{
 							{
 								"type": "text",
-								"text": "Таймер успешно сброшен.",
+								"text": "Timer successfully reset.",
 							},
 						},
 					},
@@ -167,7 +168,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 			}
 
 		} else if req.Method == "prompts/list" {
-			log.Println("[MCP] Агент запрашивает список промптов...")
+			log.Println("[MCP] Agent requests prompt list...")
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
@@ -175,7 +176,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 					"prompts": []map[string]interface{}{
 						{
 							"name":        "coaching_mode",
-							"description": "Инструкции для включения режима Coaching Mode.",
+							"description": "Instructions for enabling Coaching Mode.",
 						},
 					},
 				},
@@ -184,18 +185,27 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 
 		} else if req.Method == "prompts/get" {
 			if req.Params.Name == "coaching_mode" {
-				log.Println("[MCP] Отдаем промпт coaching_mode...")
+				log.Println("[MCP] Sending coaching_mode prompt...")
+				report := stateManager.GetReport()
+				promptText := fmt.Sprintf(
+					"You are a productivity coach. "+
+						"The developer triggered a friction alert. Diagnostic data: %s. "+
+						"Based on this data: if trigger_reason is 'error_loop', ask one focused "+
+						"question about the failing command. If 'idle_timeout', ask if they are "+
+						"blocked or need to decompose the current task. Be brief and constructive.",
+					report,
+				)
 				resp := ResponseRPC{
 					JSONRPC: "2.0",
 					ID:      req.ID,
 					Result: map[string]interface{}{
-						"description": "Инструкции для включения режима Coaching Mode.",
+						"description": "Instructions for enabling Coaching Mode.",
 						"messages": []map[string]interface{}{
 							{
-								"role": "user",
+								"role": "system",
 								"content": map[string]interface{}{
 									"type": "text",
-									"text": "Ты теперь действуешь как коуч по продуктивности. Проанализируй Friction Report и, если есть проблемы, предложи помощь. Будь краток и конструктивен.",
+									"text": promptText,
 								},
 							},
 						},
@@ -214,7 +224,7 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 				encoder.Encode(resp)
 			}
 
-			// 6. Ping (проверка активности)
+			// 6. Ping (activity check)
 		} else if req.Method == "ping" {
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
@@ -223,9 +233,9 @@ func StartHandler(ctx context.Context, stateManager *state.Manager) {
 			}
 			encoder.Encode(resp)
 
-			// 6. Обработка неизвестных методов (чтобы не вешать клиента таймаутом)
+			// 6. Unknown method handling (to avoid hanging the client)
 		} else if req.ID != nil {
-			log.Printf("[MCP] Метод не поддерживается: %s", req.Method)
+			log.Printf("[MCP] Method not supported: %s", req.Method)
 			resp := ResponseRPC{
 				JSONRPC: "2.0",
 				ID:      req.ID,
